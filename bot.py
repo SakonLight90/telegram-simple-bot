@@ -1,10 +1,12 @@
-import telegram
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackQueryHandler
-import random
+import json
+from Crypto.Random import get_random_bytes
+from Crypto.PublicKey import ECC
 
 # Dizionario per memorizzare i portafogli degli utenti
 user_wallets = {}
+
+# Percorso del file per salvare le chiavi di sicurezza
+KEYS_FILE = "wallet_keys.json"
 
 # Funzione per generare un indirizzo di portafoglio BTC
 def generate_btc_address():
@@ -24,18 +26,48 @@ def generate_eth_address():
     suffix = ''.join(random.choices('abcdefghijklmnopqrstuvwxyz0123456789', k=40 - len(prefix)))
     return prefix + suffix
 
+# Funzione per creare un wallet principale e salvare le chiavi di sicurezza
+def create_main_wallet():
+    btc_address = generate_btc_address()
+    bnb_address = generate_bnb_address()
+    eth_address = generate_eth_address()
+
+    # Genera una chiave privata ECC per ciascuna criptovaluta
+    btc_private_key = generate_ecc_private_key()
+    bnb_private_key = generate_ecc_private_key()
+    eth_private_key = generate_ecc_private_key()
+
+    keys_data = {
+        "BTC": {"address": btc_address, "private_key": btc_private_key},
+        "BNB": {"address": bnb_address, "private_key": bnb_private_key},
+        "ETH": {"address": eth_address, "private_key": eth_private_key}
+    }
+
+    with open(KEYS_FILE, 'w') as f:
+        json.dump(keys_data, f)
+
+# Funzione per generare una chiave privata ECC
+def generate_ecc_private_key():
+    key = ECC.generate(curve='P-256')
+    return key.export_key(format='PEM')
+
+# Funzione per caricare le chiavi di sicurezza dal file
+def load_keys():
+    with open(KEYS_FILE) as f:
+        return json.load(f)
+
 # Funzione per creare un portafoglio con la configurazione di rete specificata
 def create_wallet_with_network(update, context, coin, network):
     user_id = update.effective_user.id
     if user_id not in user_wallets:
         if coin.lower() == 'btc':
-            btc_address = generate_btc_address()
+            btc_address = load_keys()["BTC"]["address"]
             user_wallets[user_id] = {'BTC': {'address': btc_address, 'network': network}}
         elif coin.lower() == 'bnb':
-            bnb_address = generate_bnb_address()
+            bnb_address = load_keys()["BNB"]["address"]
             user_wallets[user_id] = {'BNB': {'address': bnb_address, 'network': network}}
         elif coin.lower() == 'eth':
-            eth_address = generate_eth_address()
+            eth_address = load_keys()["ETH"]["address"]
             user_wallets[user_id] = {'ETH': {'address': eth_address, 'network': network}}
         update.message.reply_text("Il tuo portafoglio è stato creato con successo!")
     else:
@@ -92,17 +124,7 @@ def generate_network_keyboard():
 
 # Funzione principale per avviare il bot
 def main():
-    updater = Updater("TOKEN", use_context=True)  # Inserisci il tuo token di accesso al bot Telegram qui
-    dp = updater.dispatcher
+    # Crea il wallet principale all'avvio del bot
+    create_main_wallet()
 
-    dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(CommandHandler("create_wallet", create_wallet))
-    dp.add_handler(MessageHandler(Filters.regex(r'(BTC|BNB|ETH)'), handle_crypto_choice, pass_user_data=True))
-    dp.add_handler(CallbackQueryHandler(handle_network_choice))
-    dp.add_handler(CommandHandler("deposit", deposit, pass_args=True))
-
-    updater.start_polling()
-    updater.idle()
-
-if __name__ == '__main__':
-    main()
+    updater = Updater("TOKEN", use_context=True)  # Inserisci il tuo token di accesso al bot Telegram
