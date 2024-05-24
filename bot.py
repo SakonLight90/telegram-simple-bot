@@ -1,6 +1,8 @@
 import json
-from Crypto.Random import get_random_bytes
+import random
 from Crypto.PublicKey import ECC
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackQueryHandler
 
 # Dizionario per memorizzare i portafogli degli utenti
 user_wallets = {}
@@ -26,6 +28,11 @@ def generate_eth_address():
     suffix = ''.join(random.choices('abcdefghijklmnopqrstuvwxyz0123456789', k=40 - len(prefix)))
     return prefix + suffix
 
+# Funzione per generare una chiave privata ECC
+def generate_ecc_private_key():
+    key = ECC.generate(curve='P-256')
+    return key.export_key(format='PEM')
+
 # Funzione per creare un wallet principale e salvare le chiavi di sicurezza
 def create_main_wallet():
     btc_address = generate_btc_address()
@@ -45,11 +52,6 @@ def create_main_wallet():
 
     with open(KEYS_FILE, 'w') as f:
         json.dump(keys_data, f)
-
-# Funzione per generare una chiave privata ECC
-def generate_ecc_private_key():
-    key = ECC.generate(curve='P-256')
-    return key.export_key(format='PEM')
 
 # Funzione per caricare le chiavi di sicurezza dal file
 def load_keys():
@@ -127,4 +129,17 @@ def main():
     # Crea il wallet principale all'avvio del bot
     create_main_wallet()
 
-    updater = Updater("TOKEN", use_context=True)  # Inserisci il tuo token di accesso al bot Telegram
+    updater = Updater("TOKEN", use_context=True)  # Inserisci il tuo token di accesso al bot Telegram qui
+    dp = updater.dispatcher
+
+    dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(CommandHandler("create_wallet", create_wallet))
+    dp.add_handler(MessageHandler(Filters.regex(r'(BTC|BNB|ETH)'), handle_crypto_choice, pass_user_data=True))
+    dp.add_handler(CallbackQueryHandler(handle_network_choice))
+    dp.add_handler(CommandHandler("deposit", deposit, pass_args=True))
+
+    updater.start_polling()
+    updater.idle()
+
+if __name__ == '__main__':
+    main()
